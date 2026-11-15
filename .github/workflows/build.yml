@@ -1,0 +1,109 @@
+name: build
+
+# Builds the signed arm64 APK from a clean checkout with pinned versions.
+# One command: bash build/export.sh (see that file for the pinning).
+#
+# Checkpointed continuation: the Godot import cache (.godot) is cached; an
+# interrupted run restores it and only re-imports changed assets. Every job
+# has timeout-minutes: 350, well under GitHub's 6h kill limit.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: "Publish a release from this run"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  android-arm64:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore Godot import cache (checkpoint)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/arena-tools
+            .godot
+          key: ringfall-godot-4.5.2-${{ hashFiles('tools/gen_assets.py', 'src/**', 'project.godot') }}
+          restore-keys: ringfall-godot-4.5.2-
+
+      - name: Build, test and export (one command)
+        run: bash build/export.sh
+
+      - name: APK facts
+        run: |
+          APK=build/ringfall-arm64.apk
+          echo "size_bytes=$(wc -c <$APK)" >> "$GITHUB_OUTPUT" || true
+          unzip -l "$APK" | grep "lib/" || true
+
+      - name: Publish release (manual runs with publish_release=true, or pushes to main)
+        if: >-
+          github.event_name == 'workflow_dispatch' && inputs.publish_release ||
+          (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v1.0.${{ github.run_number }}"
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Ringfall $TAG" \
+            --notes "Signed arm64-v8a APK built by CI from commit $GITHUB_SHA.
+
+          - Engine: Godot 4.5.2-stable (pinned), export templates 4.5.2 (pinned)
+          - ABI: arm64-v8a only
+          - Renderer: GL Compatibility (mobile-tuned)
+          - Signing: project signing key signing/debug.keystore (public, documented)
+          - Engine-side tests: knockback/stocks, input mapping, hit detection (tests/run_tests.gd)
+
+          ### Checksums (SHA-256)
+          \`\`\`
+          $(sha256sum build/ringfall-arm64.apk)
+          \`\`\`" \
+            build/ringfall-arm64.apk
+
+      - name: Attach screenshots when they exist
+        if: >-
+          github.event_name == 'workflow_dispatch' && inputs.publish_release ||
+          (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v1.0.${{ github.run_number }}"
+          if compgen -G "docs/screenshots/*.png" >/dev/null; then
+            gh release upload "$TAG" docs/screenshots/*.png --repo "$GITHUB_REPOSITORY" --clobber
+          fi
+
+  smoke-x86_64:
+    # Debug x86_64 APK for automated smoke tests. NEVER shipped in a release.
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore Godot import cache (checkpoint)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/arena-tools
+            .godot
+          key: ringfall-godot-4.5.2-${{ hashFiles('tools/gen_assets.py', 'src/**', 'project.godot') }}
+          restore-keys: ringfall-godot-4.5.2-
+      - name: Export x86_64 debug APK (not for release)
+        run: |
+          bash build/export.sh
+          sed -i 's/build\/ringfall-arm64.apk/build\/ringfall-x86_64-debug.apk/; s/architectures\/arm64-v8a=true/architectures\/arm64-v8a=false/; s/architectures\/x86_64=false/architectures\/x86_64=true/' export_presets.cfg
+          ~/.cache/arena-tools/godot --headless --export-debug "Android arm64" build/ringfall-x86_64-debug.apk 2>&1 | tail -3
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ringfall-x86_64-debug-apk
+          path: build/ringfall-x86_64-debug.apk
+          if-no-files-found: error

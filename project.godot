@@ -1,0 +1,47 @@
+; Engine configuration file.
+; Ringfall - original 2D platform fighter, Godot 4.5
+
+config_version=5
+
+[application]
+
+config/name="Ringfall"
+config/description="An original Brawlhalla-style 2D platform fighter with an Xbox-style on-screen controller. All assets are original and procedurally generated."
+run/main_scene="res://src/main.tscn"
+config/features=PackedStringArray("4.5")
+config/icon="res://icon.svg"
+boot_splash/bg_color=Color(0.02, 0.03, 0.08, 1)
+boot_splash/show_image=false
+
+[audio]
+
+buses/default_bus_layout=""
+
+[debug]
+
+settings/stdout/gdscript_prints=false
+
+[display]
+
+window/size/viewport_width=1920
+window/size/viewport_height=1080
+window/handheld/orientation=4
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
+[input_devices]
+
+pointing/emulate_touch_from_mouse=true
+
+[physics]
+
+common/physics_ticks_per_second=60
+common/max_physics_steps_per_frame=8
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/vram_compression/import_etc2_astc=true
+2d/snap/snap_2d_transforms_to_pixel=false
+environment/defaults/default_clear_color=Color(0.02, 0.03, 0.08, 1)
